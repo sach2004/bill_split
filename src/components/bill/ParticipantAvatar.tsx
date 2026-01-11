@@ -1,39 +1,43 @@
-'use client'
+"use client";
 
-import { motion } from 'framer-motion'
-import { User, Phone } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { motion } from "framer-motion";
+import { CheckCircle2 } from "lucide-react";
 
 interface ParticipantAvatarProps {
-  name: string
-  phone?: string
-  isPaid?: boolean
-  className?: string
+  name: string;
+  phone?: string | null;
+  isPaid?: boolean;
 }
 
-export function ParticipantAvatar({ name, phone, isPaid = false, className }: ParticipantAvatarProps) {
+export function ParticipantAvatar({
+  name,
+  phone,
+  isPaid,
+}: ParticipantAvatarProps) {
   const initials = name
-    .split(' ')
-    .map(n => n[0])
-    .join('')
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
     .toUpperCase()
-    .slice(0, 2)
+    .slice(0, 2);
 
   return (
-    <motion.div
-      whileHover={{ scale: 1.05, rotate: 2 }}
-      className={cn(
-        "relative inline-flex items-center justify-center w-12 h-12 rounded-full font-bold text-white transition-all",
-        isPaid ? "bg-green-500" : "bg-indigo-500",
-        className
+    <div className="relative">
+      <motion.div
+        whileHover={{ scale: 1.05 }}
+        className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xl mx-auto"
+      >
+        {initials}
+      </motion.div>
+      {isPaid && (
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center border-2 border-white"
+        >
+          <CheckCircle2 className="w-4 h-4 text-white" />
+        </motion.div>
       )}
-    >
-      {initials || <User size={20} />}
-      {phone && (
-        <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center border-2 border-white">
-          <Phone size={10} />
-        </div>
-      )}
-    </motion.div>
-  )
+    </div>
+  );
 }

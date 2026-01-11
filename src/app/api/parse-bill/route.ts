@@ -1,27 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { parseBillFromImage } from '@/lib/openai'
-import { z } from 'zod'
-
-const parseBillSchema = z.object({
-  image: z.string(),
-  imageData: z.string().optional(),
-})
+import { parseBillFromImage, parseBillFromMultipleImages } from '@/lib/openai'
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
+    const { image, images, multiple } = body
     
-    const validation = parseBillSchema.safeParse(body)
-    if (!validation.success) {
+    if (!image && (!images || !Array.isArray(images))) {
       return NextResponse.json(
-        { error: 'Invalid request data', details: validation.error.issues },
+        { error: 'No image provided' },
         { status: 400 }
       )
     }
 
-    const { image } = validation.data
-    
-    const result = await parseBillFromImage(image)
+    let result
+
+    if (multiple && images && images.length > 1) {
+      // Multiple images
+      result = await parseBillFromMultipleImages(images)
+    } else {
+      // Single image
+      result = await parseBillFromImage(image || images[0])
+    }
     
     if (!result.success) {
       return NextResponse.json(
@@ -32,17 +32,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: result.data,
+      data: { ...result.data, provider: result.provider },
       provider: result.provider,
     })
   } catch (error: any) {
-    console.error('Parse bill error:', error)
-    
     return NextResponse.json(
-      { 
-        error: error.message || 'Failed to parse bill',
-        provider: error.provider || null,
-      },
+      { error: error.message || 'Failed to parse' },
       { status: 500 }
     )
   }

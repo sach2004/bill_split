@@ -3,30 +3,45 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
-import { Save, User, QrCode, ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { Save, User, QrCode, ArrowLeft, Loader2, LogOut } from 'lucide-react'
+import { useClerk, useUser } from '@clerk/nextjs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { LoadingDots } from '@/components/animations/LoadingDots'
-import { PageTransition } from '@/components/animations/PageTransition'
-import { useUser } from '@clerk/nextjs'
+import { toast } from '@/components/ui/toast'
 
 export default function SettingsPage() {
   const router = useRouter()
   const { user, isLoaded } = useUser()
+  const { signOut } = useClerk()
   const [userUpi, setUserUpi] = useState('')
+  const [userPhone, setUserPhone] = useState('')
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (isLoaded && user) {
-      setUserUpi(user.defaultUpi || '')
+    if (isLoaded) fetchProfile()
+  }, [isLoaded])
+
+  const fetchProfile = async () => {
+    try {
+      const response = await fetch('/api/user/profile')
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success && result.user) {
+          setUserPhone(result.user.phone || '')
+          setUserUpi(result.user.defaultUpi || '')
+        }
+      }
+    } catch (error) {
+      console.error('Error:', error)
+    } finally {
+      setLoading(false)
     }
-  }, [user, isLoaded])
+  }
 
   const handleSave = async () => {
-    if (!user) {
-      alert('Please sign in to save your settings')
+    if (!userPhone.trim()) {
+      toast('Phone number required', 'error')
       return
     }
 
@@ -35,151 +50,134 @@ export default function SettingsPage() {
       const response = await fetch('/api/user/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ defaultUpi: userUpi.trim() }),
+        body: JSON.stringify({ 
+          phone: userPhone.trim(),
+          defaultUpi: userUpi.trim() || null
+        }),
       })
 
-      const result = await response.json()
-      
-      if (result.success) {
-        setSaved(true)
-        setTimeout(() => setSaved(false), 3000)
+      if (response.ok) {
+        toast('Settings saved!', 'success')
       } else {
-        alert(result.error || 'Failed to save')
+        toast('Failed to save', 'error')
       }
     } catch (error) {
-      console.error('Save profile error:', error)
-      alert('Failed to save profile')
+      toast('Failed to save', 'error')
     } finally {
       setSaving(false)
     }
   }
 
+  const handleSignOut = async () => {
+    await signOut()
+    toast('Signed out', 'success')
+    router.push('/')
+  }
+
   if (loading) {
     return (
-      <PageTransition>
-        <div className="min-h-screen flex items-center justify-center p-6">
-          <div className="text-center">
-            <LoadingDots />
-            <p className="mt-4 text-gray-600">Loading settings...</p>
-          </div>
-        </div>
-      </PageTransition>
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-12 h-12 animate-spin text-indigo-400" />
+      </div>
     )
   }
 
   return (
-    <PageTransition>
-      <div className="min-h-screen p-4 md:p-6">
-        <header className="max-w-2xl mx-auto mb-6">
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-          >
-            <ArrowLeft size={20} />
-            Back to Dashboard
-          </button>
-        </header>
-
-        <main className="max-w-2xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
-                    <User size={24} className="text-white" />
-                  </div>
-                  <div>
-                    <CardTitle>Profile Settings</CardTitle>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Set your UPI ID to receive payments
-                    </p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Your UPI ID
-                  </label>
-                  <div className="flex gap-3">
-                    <Input
-                      value={userUpi}
-                      onChange={(e) => setUserUpi(e.target.value)}
-                      placeholder="yourname@upi"
-                      disabled={saving}
-                      className="flex-1"
-                    />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setUserUpi('')}
-                      disabled={saving}
-                    >
-                      <QrCode size={20} />
-                    </Button>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Examples: yourname@upi, phone@paytm, yourid@ybl
-                  </p>
-                </div>
-
-                <div className="p-4 bg-indigo-50 rounded-2xl">
-                  <h4 className="font-semibold text-indigo-900 mb-2">What is UPI ID?</h4>
-                  <ul className="text-sm text-indigo-700 space-y-1">
-                    <li>• Your unique identifier for receiving UPI payments</li>
-                    <li>• Provided by your bank or UPI app</li>
-                    <li>• Found in PhonePe, Google Pay, Paytm settings</li>
-                    <li>• Share it with others who need to pay you</li>
-                  </ul>
-                </div>
-
-                <motion.div whileTap={{ scale: 0.98 }}>
-                  <Button
-                    onClick={handleSave}
-                    disabled={saving}
-                    size="lg"
-                    className="w-full h-14 text-lg rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600"
-                  >
-                    {saving ? (
-                      <>
-                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                        Saving...
-                      </>
-                    ) : saved ? (
-                      <>
-                        <CheckCircle2 className="mr-2" />
-                        Saved!
-                      </>
-                    ) : (
-                      <>
-                        <Save className="mr-2" />
-                        Save Settings
-                      </>
-                    )}
-                  </Button>
-                </motion.div>
-
-                <div className="p-4 bg-amber-50 rounded-2xl border-2 border-amber-200">
-                  <h4 className="font-semibold text-amber-900 mb-2 flex items-center gap-2">
-                    <QrCode size={18} />
-                    How to get your UPI ID?
-                  </h4>
-                  <ol className="text-sm text-amber-800 space-y-2 list-decimal list-inside">
-                    <li className="ml-4">Open PhonePe → Go to Profile → Payment Address</li>
-                    <li className="ml-4">Open Google Pay → Go to Profile → Bank Account</li>
-                    <li className="ml-4">Open Paytm → Go to Profile → Payment Settings</li>
-                    <li className="ml-4">Copy the UPI ID and paste it above</li>
-                  </ol>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        </main>
+    <div className="min-h-screen">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl animate-pulse" />
       </div>
-    </PageTransition>
+
+      <div className="sticky top-0 z-50 glass border-b border-white/10">
+        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
+          <button onClick={() => router.push('/dashboard')} className="flex items-center gap-2 text-white font-semibold hover:text-indigo-400">
+            <ArrowLeft className="w-5 h-5" />Back
+          </button>
+          <Button onClick={handleSignOut} variant="outline" size="sm" className="rounded-full border-white/20 text-white hover:bg-white/10">
+            <LogOut className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      <main className="relative z-10 max-w-3xl mx-auto px-4 py-6">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="glass rounded-3xl border border-white/10 shadow-2xl overflow-hidden">
+            <div className="bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 p-6">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                  <User className="w-8 h-8 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-white">Settings</h1>
+                  <p className="text-indigo-100 text-sm">Payment info</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {user && (
+                <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold">
+                      {user.firstName?.substring(0, 2).toUpperCase() || 'U'}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-white">{user.firstName} {user.lastName}</p>
+                      <p className="text-sm text-gray-400">{user.emailAddresses[0]?.emailAddress}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-bold text-gray-300 mb-2">Phone *</label>
+                <Input
+                  type="tel"
+                  value={userPhone}
+                  onChange={(e) => setUserPhone(e.target.value)}
+                  placeholder="+91 98765 43210"
+                  disabled={saving}
+                  className="h-14 glass border-white/20 text-white placeholder:text-gray-500"
+                />
+                <p className="text-xs text-gray-400 mt-2">Required for payments</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-300 mb-2">UPI ID</label>
+                <Input
+                  value={userUpi}
+                  onChange={(e) => setUserUpi(e.target.value)}
+                  placeholder="yourname@paytm"
+                  disabled={saving}
+                  className="h-14 glass border-white/20 text-white placeholder:text-gray-500"
+                />
+                <p className="text-xs text-gray-400 mt-2">Optional</p>
+              </div>
+
+              <div className="p-4 bg-indigo-500/20 rounded-2xl border border-indigo-500/30">
+                <h4 className="font-bold text-indigo-300 mb-2 flex items-center gap-2">
+                  <QrCode className="w-5 h-5" />Get UPI ID
+                </h4>
+                <ul className="text-sm text-indigo-200 space-y-1">
+                  <li>• PhonePe → Profile → Payment Address</li>
+                  <li>• Google Pay → Profile → Bank Account</li>
+                  <li>• Paytm → Profile → Payment Settings</li>
+                </ul>
+              </div>
+
+              <Button
+                onClick={handleSave}
+                disabled={saving || !userPhone.trim()}
+                size="lg"
+                className="w-full h-16 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 glow"
+              >
+                {saving ? <><Loader2 className="mr-2 animate-spin" />Saving...</> : <><Save className="mr-2" />Save</>}
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      </main>
+    </div>
   )
 }

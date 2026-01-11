@@ -3,73 +3,83 @@
 import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
-import { Camera, Upload, Check, ArrowRight, Loader2 } from 'lucide-react'
+import { Camera, ArrowRight, Loader2, X, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { LoadingDots } from '@/components/animations/LoadingDots'
-import { PageTransition } from '@/components/animations/PageTransition'
-import { BillItem } from '@/store/billStore'
+import { toast } from '@/components/ui/toast'
 
 export default function CreateBillPage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [image, setImage] = useState<string | null>(null)
+  const [images, setImages] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [parsed, setParsed] = useState<any>(null)
   const [title, setTitle] = useState('')
   const [totalAmount, setTotalAmount] = useState('')
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
 
-    if (file.size > 10 * 1024 * 1024) {
-      alert('File size must be less than 10MB')
+    for (const file of files) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast('File must be less than 10MB', 'error')
+        continue
+      }
+
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string
+        setImages(prev => [...prev, base64])
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleRemoveImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index))
+    if (images.length === 1) {
+      setParsed(null)
+    }
+  }
+
+  const handleScanBills = async () => {
+    if (images.length === 0) {
+      toast('Please upload at least one image', 'error')
       return
     }
 
-    const reader = new FileReader()
-    reader.onload = async (event) => {
-      const base64 = event.target?.result as string
-      setImage(base64)
+    setLoading(true)
+    try {
+      const response = await fetch('/api/parse-bill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          images: images,
+          multiple: images.length > 1
+        }),
+      })
 
-      setLoading(true)
-      try {
-        const response = await fetch('/api/parse-bill', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: base64 }),
-        })
-
-        const result = await response.json()
-        
-        if (result.success) {
-          setParsed(result.data)
-          setTitle(result.data.restaurantName || 'New Bill')
-          setTotalAmount(result.data.totalAmount?.toString() || '')
-        } else {
-          if (result.error?.includes('API key not configured')) {
-            alert('⚠️ No AI API key configured!\n\nPlease add one of these to your .env file:\n• OPENAI_API_KEY (OpenAI GPT-4o)\n• GOOGLE_GEMINI_API_KEY (Google Gemini)\n\nRestart the server after adding keys.')
-          } else if (result.error?.includes('HTML instead of JSON')) {
-            alert('⚠️ API Error\n\nThe API returned an error. This usually means:\n• Your API key is invalid\n• You\'ve exceeded your quota\n• The service is temporarily down\n\nPlease check your API keys in .env')
-          } else {
-            alert(`⚠️ Bill parsing failed (${result.provider || 'AI'}):\n\n${result.error}\n\nTry taking a clearer photo or using a different provider.`)
-          }
-        }
-      } catch (error) {
-        console.error('Parse error:', error)
-        alert('Failed to parse bill image')
-      } finally {
-        setLoading(false)
+      const result = await response.json()
+      
+      if (result.success) {
+        setParsed(result.data)
+        setTitle(result.data.restaurantName || 'New Bill')
+        setTotalAmount(result.data.totalAmount?.toString() || '')
+        toast(`Scanned with ${result.provider}!`, 'success')
+      } else {
+        toast(result.error || 'Failed to parse', 'error')
       }
+    } catch (error) {
+      toast('Failed to parse bill', 'error')
+    } finally {
+      setLoading(false)
     }
-    reader.readAsDataURL(file)
   }
 
   const handleCreateBill = async () => {
     if (!parsed || !title || !totalAmount) {
-      alert('Please fill all required fields')
+      toast('Fill all fields', 'error')
       return
     }
 
@@ -80,7 +90,7 @@ export default function CreateBillPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title,
-          imageUrl: image,
+          imageUrl: images[0],
           totalAmount: parseFloat(totalAmount),
           restaurantName: parsed.restaurantName,
           items: parsed.items || [],
@@ -90,194 +100,197 @@ export default function CreateBillPage() {
       const result = await response.json()
       
       if (result.success) {
-        router.push(`/bill/${result.bill.shareId}`)
+        router.push(`/create-bill/upi-setup?billId=${result.bill.shareId}`)
       } else {
-        alert(result.error || 'Failed to create bill')
+        toast(result.error || 'Failed to create', 'error')
       }
     } catch (error) {
-      console.error('Create bill error:', error)
-      alert('Failed to create bill')
+      toast('Failed to create bill', 'error')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <PageTransition>
-      <div className="min-h-screen p-4 md:p-6">
-        <header className="max-w-4xl mx-auto mb-6">
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-          >
+    <div className="min-h-screen pb-20">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl animate-pulse" />
+      </div>
+
+      <div className="sticky top-0 z-50 glass border-b border-white/10">
+        <div className="max-w-5xl mx-auto px-4 py-4">
+          <button onClick={() => router.back()} className="text-white font-semibold hover:text-indigo-400">
             ← Back
           </button>
-        </header>
+        </div>
+      </div>
 
-        <main className="max-w-4xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <h1 className="text-4xl md:text-5xl font-bold mb-8 text-gray-900">
-              Create New Bill
-            </h1>
+      <main className="relative z-10 max-w-5xl mx-auto px-4 py-6">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-white mb-2">Create Bill</h1>
+          <p className="text-gray-400 text-sm">Upload one or more bill images</p>
+        </div>
 
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <Card className="overflow-hidden">
-                  <CardHeader className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white">
-                    <CardTitle className="text-white">1. Upload Bill</CardTitle>
-                    <p className="text-indigo-100 text-sm mt-1">
-                      Take a photo or upload an image
-                    </p>
-                  </CardHeader>
-                  <CardContent className="p-6">
-                    {!image ? (
-                      <motion.div
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => fileInputRef.current?.click()}
-                        className="border-2 border-dashed border-indigo-300 rounded-3xl p-8 text-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-all"
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Upload */}
+          <div className="glass rounded-3xl border border-white/10 overflow-hidden">
+            <div className="bg-gradient-to-br from-indigo-600 to-purple-600 p-5">
+              <h2 className="text-white font-bold text-xl flex items-center gap-2">
+                <Camera className="w-6 h-6" />
+                1. Upload Bills
+              </h2>
+              <p className="text-indigo-100 text-sm mt-1">Add multiple images if needed</p>
+            </div>
+            <div className="p-5">
+              {images.length === 0 ? (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-indigo-400/50 rounded-2xl p-10 text-center cursor-pointer hover:border-indigo-400 hover:bg-white/5 transition-all"
+                >
+                  <Camera className="w-16 h-16 mx-auto mb-4 text-indigo-400" />
+                  <p className="font-semibold text-white mb-2">Tap to upload</p>
+                  <p className="text-sm text-gray-400">JPG, PNG • Multiple allowed</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {images.map((img, idx) => (
+                    <div key={idx} className="relative group">
+                      <img src={img} alt={`Bill ${idx + 1}`} className="w-full rounded-xl border-2 border-white/20" />
+                      <button
+                        onClick={() => handleRemoveImage(idx)}
+                        className="absolute top-2 right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg transition-all opacity-0 group-hover:opacity-100"
                       >
-                        <Camera className="w-16 h-16 mx-auto mb-4 text-indigo-500" />
-                        <p className="font-semibold text-gray-900 mb-2">
-                          Tap to upload bill
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          JPG, PNG up to 10MB
-                        </p>
-                      </motion.div>
-                    ) : (
-                      <div className="relative">
-                        <img
-                          src={image}
-                          alt="Bill"
-                          className="w-full rounded-2xl"
-                        />
-                        <motion.button
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => {
-                            setImage(null)
-                            setParsed(null)
-                          }}
-                          className="absolute top-2 right-2 w-10 h-10 bg-red-500 text-white rounded-full flex items-center justify-center"
-                        >
-                          ✕
-                        </motion.button>
+                        <X className="w-4 h-4" />
+                      </button>
+                      <div className="absolute bottom-2 left-2 px-3 py-1 bg-black/70 backdrop-blur-sm rounded-full text-white text-xs font-bold">
+                        Image {idx + 1}
                       </div>
-                    )}
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileSelect}
-                      className="hidden"
-                    />
-                  </CardContent>
-                </Card>
+                    </div>
+                  ))}
+                  
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full p-4 border-2 border-dashed border-indigo-400/50 rounded-xl hover:border-indigo-400 hover:bg-white/5 transition-all flex items-center justify-center gap-2 text-indigo-400 font-semibold"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Add Another Image
+                  </button>
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+              />
 
-                {loading && (
-                  <div className="mt-6 bg-indigo-50 rounded-2xl p-6 text-center">
-                    <LoadingDots />
-                    <p className="mt-4 text-indigo-600 font-medium">
-                      {parsed ? 'Creating bill...' : 'AI is reading your bill...'}
+              {images.length > 0 && !parsed && (
+                <Button
+                  onClick={handleScanBills}
+                  disabled={loading}
+                  className="w-full mt-4 h-12 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 animate-spin" />
+                      Scanning {images.length} image{images.length > 1 ? 's' : ''}...
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="mr-2" />
+                      Scan Bill{images.length > 1 ? 's' : ''}
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Details */}
+          <div className="space-y-6">
+            <div className="glass rounded-3xl border border-white/10 overflow-hidden">
+              <div className="bg-gradient-to-br from-purple-600 to-pink-600 p-5">
+                <h2 className="text-white font-bold text-xl">2. Review</h2>
+              </div>
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-300 mb-2">Title *</label>
+                  <Input 
+                    value={title} 
+                    onChange={(e) => setTitle(e.target.value)} 
+                    placeholder="Lunch at Cafe" 
+                    className="h-12 glass border-white/20 text-white placeholder:text-gray-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-bold text-gray-300 mb-2">Total (₹) *</label>
+                  <Input
+                    type="number"
+                    value={totalAmount}
+                    onChange={(e) => setTotalAmount(e.target.value)}
+                    placeholder="0.00"
+                    step="0.01"
+                    className="h-12 glass border-white/20 text-white placeholder:text-gray-500"
+                  />
+                </div>
+
+                {parsed?.items && parsed.items.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-bold text-gray-300 mb-2">
+                      Items ({parsed.items.length})
+                    </label>
+                    <div className="space-y-2 max-h-48 overflow-y-auto p-2 bg-black/30 rounded-xl">
+                      {parsed.items.map((item: any, index: number) => (
+                        <motion.div
+                          key={index}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.03 }}
+                          className="flex justify-between p-3 bg-white/5 rounded-lg border border-white/10"
+                        >
+                          <span className="text-sm text-white">{item.name}</span>
+                          <span className="font-mono text-sm font-semibold text-indigo-400">₹{item.price}</span>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {parsed && (
+                  <div className="p-3 bg-green-500/20 rounded-xl border border-green-500/30">
+                    <p className="text-xs text-green-200">
+                      ✓ Scanned with {parsed.provider || 'AI'}
                     </p>
                   </div>
                 )}
               </div>
-
-              <div className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>2. Review & Edit</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Bill Title *
-                      </label>
-                      <Input
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="Lunch at Cafe"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Total Amount (₹) *
-                      </label>
-                      <Input
-                        type="number"
-                        value={totalAmount}
-                        onChange={(e) => setTotalAmount(e.target.value)}
-                        placeholder="0.00"
-                        step="0.01"
-                      />
-                    </div>
-
-                    {parsed?.restaurantName && (
-                      <div className="p-3 bg-indigo-50 rounded-xl">
-                        <p className="text-sm text-gray-600">
-                          Detected: <span className="font-semibold text-indigo-600">
-                            {parsed.restaurantName}
-                          </span>
-                        </p>
-                      </div>
-                    )}
-
-                    {parsed?.items && parsed.items.length > 0 && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Items Detected
-                        </label>
-                        <div className="space-y-2 max-h-48 overflow-y-auto">
-                          {parsed.items.map((item: BillItem, index: number) => (
-                            <motion.div
-                              key={index}
-                              initial={{ opacity: 0, x: -20 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ delay: index * 0.05 }}
-                              className="flex items-center justify-between p-3 bg-gray-50 rounded-xl"
-                            >
-                              <span className="flex-1 text-sm">{item.name}</span>
-                              <span className="font-mono text-sm font-semibold">
-                                ₹{item.price}
-                              </span>
-                            </motion.div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <motion.div whileTap={{ scale: 0.98 }}>
-                  <Button
-                    onClick={handleCreateBill}
-                    disabled={!parsed || loading}
-                    size="lg"
-                    className="w-full h-14 text-lg rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="mr-2 animate-spin" />
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        Create & Share
-                        <ArrowRight className="ml-2" />
-                      </>
-                    )}
-                  </Button>
-                </motion.div>
-              </div>
             </div>
-          </motion.div>
-        </main>
-      </div>
-    </PageTransition>
+
+            <Button
+              onClick={handleCreateBill}
+              disabled={!parsed || loading}
+              size="lg"
+              className="w-full h-16 text-lg rounded-2xl shadow-2xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 glow"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  Create & Share
+                  <ArrowRight className="ml-2" />
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </main>
+    </div>
   )
 }

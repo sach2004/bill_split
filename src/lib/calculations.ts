@@ -1,44 +1,56 @@
 export function generateShareId(): string {
-  const chars = 'abcdefghjkmnpqrstuvwxyz23456789'
-  let result = ''
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  let result = "";
   for (let i = 0; i < 8; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return result
+  return result;
 }
 
-export function calculateParticipantShare(
-  items: Array<{ id: string; price: number; quantity: number }>,
-  participantItems: Array<{ itemId: string; quantity: number }>,
-  totalAmount: number,
-  billTotal: number
-): number {
-  let share = 0
-  
-  for (const pItem of participantItems) {
-    const item = items.find(i => i.id === pItem.itemId)
-    if (item) {
-      const pricePerUnit = item.price / item.quantity
-      share += pricePerUnit * pItem.quantity
-    }
-  }
-  
-  const ratio = share / billTotal
-  const finalShare = ratio * totalAmount
-  
-  return Math.round(finalShare * 100) / 100
-}
-
-export function formatCurrency(amount: number): string {
-  return `₹${amount.toFixed(2)}`
+export function formatCurrency(
+  amount: number,
+  currency: string = "INR"
+): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
 }
 
 export function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(date))
+  return new Intl.DateTimeFormat("en-IN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
+export function calculateParticipantShare(
+  allItems: any[],
+  participantItems: { itemId: string; quantity?: number }[],
+  billTotal: number,
+  itemsTotal: number
+): number {
+  if (!allItems || allItems.length === 0) return 0;
+  if (!participantItems || participantItems.length === 0) return 0;
+
+  // Calculate sum of selected items
+  let selectedSum = 0;
+  for (const pItem of participantItems) {
+    const item = allItems.find((i) => i.id === pItem.itemId);
+    if (item) {
+      selectedSum += item.price * (item.quantity || 1);
+    }
+  }
+
+  // If items total is 0, return 0
+  if (itemsTotal === 0) return 0;
+
+  // Calculate proportional share of the bill total
+  const shareRatio = selectedSum / itemsTotal;
+  const share = billTotal * shareRatio;
+
+  return Math.round(share * 100) / 100;
 }

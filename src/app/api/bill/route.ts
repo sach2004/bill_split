@@ -1,26 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { currentUser } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@clerk/nextjs/server'
 import { generateShareId } from '@/lib/calculations'
-import { z } from 'zod'
-
-const createBillSchema = z.object({
-  title: z.string().min(1),
-  imageUrl: z.string().url().optional(),
-  totalAmount: z.number().positive(),
-  restaurantName: z.string().optional(),
-  location: z.string().optional(),
-  items: z.array(z.object({
-    name: z.string(),
-    price: z.number(),
-    quantity: z.number().int().positive(),
-    category: z.string().optional(),
-  })),
-})
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await currentUser()
+    const authResult = await auth()
+    const userId = authResult.userId
+    const clerkUser = await currentUser()
     
     if (!userId) {
       return NextResponse.json(
@@ -29,38 +16,67 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Get or create user in database
+    let dbUser = await prisma.user.findUnique({
+      where: { clerkId: userId }
+    })
+
+    if (!dbUser) {
+      const userName = clerkUser?.firstName && clerkUser?.lastName 
+        ? `${clerkUser.firstName} ${clerkUser.lastName}`.trim()
+        : clerkUser?.firstName || clerkUser?.username || 'User'
+
+      dbUser = await prisma.user.create({
+        data: {
+          clerkId: userId,
+          email: clerkUser?.emailAddresses?.[0]?.emailAddress || `user-${userId}@temp.com`,
+          name: userName,
+          phone: clerkUser?.phoneNumbers?.[0]?.phoneNumber || null,
+        }
+      })
+    }
+
     const body = await req.json()
-    const validation = createBillSchema.safeParse(body)
+    const { title, imageUrl, totalAmount, restaurantName, items } = body
     
-    if (!validation.success) {
+    if (!title || !totalAmount || !items) {
       return NextResponse.json(
-        { error: 'Invalid bill data', details: validation.error.issues },
+        { error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    const billData = validation.data
-    
     const shareId = generateShareId()
 
     const bill = await prisma.bill.create({
       data: {
         shareId,
-        title: billData.title,
-        imageUrl: billData.imageUrl,
-        totalAmount: billData.totalAmount,
-        restaurantName: billData.restaurantName,
-        location: billData.location,
-        createdById: userId,
+        title,
+        imageUrl,
+        totalAmount,
+        restaurantName,
+        createdById: dbUser.id,
         items: {
-          create: billData.items.map(item => ({
+          create: items.map((item: any) => ({
             name: item.name,
             price: item.price,
-            quantity: item.quantity,
+            quantity: item.quantity || 1,
             category: item.category,
           })),
         },
       },
+      include: {
+        items: true,
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            defaultUpi: true,
+          }
+        }
+      }
     })
 
     return NextResponse.json({
@@ -78,7 +94,8 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    const { userId } = await currentUser()
+    const authResult = await auth()
+    const userId = authResult.userId
     
     if (!userId) {
       return NextResponse.json(
@@ -87,28 +104,34 @@ export async function GET(req: NextRequest) {
       )
     }
 
+    const dbUser = await prisma.user.findUnique({
+      where: { clerkId: userId }
+    })
+
+    if (!dbUser) {
+      return NextResponse.json({
+        success: true,
+        bills: [],
+      })
+    }
+
     const bills = await prisma.bill.findMany({
       where: {
         OR: [
-          { createdById: userId },
-          { participants: { some: { userId } } },
+          { createdById: dbUser.id },
+          { participants: { some: { userId: dbUser.id } } },
         ],
       },
       include: {
         items: true,
-        participants: {
-          include: {
-            items: {
-              select: {
-                id: true,
-                name: true,
-                price: true,
-                quantity: true,
-                category: true,
-              },
-            },
-          },
-        },
+        participants: true,
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
       },
       orderBy: {
         createdAt: 'desc',

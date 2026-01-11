@@ -11,8 +11,8 @@
 }
 
 :root {
-  --background: #fef3c7;
-  --foreground: #1f2937;
+  --background: #0a0a0a;
+  --foreground: #ffffff;
 }
 
 * {
@@ -22,10 +22,11 @@
 body {
   @apply antialiased;
   font-family: var(--font-body);
-  background: var(--background);
+  background: linear-gradient(135deg, #0f0f23 0%, #1a0b2e 50%, #16213e 100%);
   color: var(--foreground);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
 }
 
 .font-poppins {
@@ -36,13 +37,6 @@ body {
   font-family: var(--font-mono);
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
-}
-
-/* Hide scrollbar but keep functionality */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -50,4 +44,14 @@ body {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glow {
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
 }

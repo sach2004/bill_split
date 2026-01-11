@@ -3,106 +3,113 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
-  id            String   @id @default(cuid())
-  clerkId       String   @unique
-  email         String   @unique
-  name          String?
-  phone         String?
-  defaultUpi    String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
-  createdBills  Bill[]
-  participations BillParticipant[]
-  payments      Payment[]
+  id         String   @id @default(uuid())
+  clerkId    String   @unique
+  email      String   @unique
+  name       String?
+  phone      String?
+  defaultUpi String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  bills        Bill[]            @relation("CreatedBills")
+  participants BillParticipant[]
+  payments     Payment[]
 }
 
 model Bill {
-  id            String   @id @default(cuid())
-  shareId       String   @unique
-  title         String
-  imageUrl      String?
-  rawText       String?
-  totalAmount   Float
+  id             String   @id @default(uuid())
+  shareId        String   @unique
+  title          String
+  totalAmount    Float
   restaurantName String?
-  location      String?
-  status        String   @default("ACTIVE")
-  
-  createdById   String
-  createdBy     User     @relation(fields: [createdById], references: [id])
-  
-  items         BillItem[]
-  participants  BillParticipant[]
-  payments      Payment[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  location       String?
+  imageUrl       String?
+  status         String   @default("ACTIVE")
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  createdBy    User              @relation("CreatedBills", fields: [createdById], references: [id], onDelete: Cascade)
+  items        BillItem[]
+  participants BillParticipant[]
+  payments     Payment[]
+
+  @@index([shareId])
+  @@index([createdById])
 }
 
 model BillItem {
-  id            String   @id @default(cuid())
-  name          String
-  price         Float
-  quantity      Int      @default(1)
-  category      String?
-  
-  billId        String
-  bill          Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
-  
-  participants  BillParticipantItem[]
-  createdAt     DateTime @default(now())
+  id       String  @id @default(uuid())
+  billId   String
+  name     String
+  price    Float
+  quantity Int     @default(1)
+  category String?
+
+  bill         Bill                  @relation(fields: [billId], references: [id], onDelete: Cascade)
+  participants BillItemParticipant[]
+
+  @@index([billId])
 }
 
 model BillParticipant {
-  id            String   @id @default(cuid())
-  userId        String?
-  user          User?    @relation(fields: [userId], references: [id])
-  name          String
-  phone         String?
-  theirShare    Float    @default(0)
-  isPaid        Boolean  @default(false)
-  joinedViaLink Boolean  @default(false)
-  
-  billId        String
-  bill          Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
-  
-  items         BillParticipantItem[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id         String   @id @default(uuid())
+  billId     String
+  userId     String?
+  name       String
+  phone      String?
+  theirShare Float    @default(0)
+  isPaid     Boolean  @default(false)
+  joinedAt   DateTime @default(now())
+
+  bill     Bill                  @relation(fields: [billId], references: [id], onDelete: Cascade)
+  user     User?                 @relation(fields: [userId], references: [id])
+  items    BillItemParticipant[]
+  payments Payment[]
+
+  @@index([billId])
+  @@index([userId])
 }
 
-model BillParticipantItem {
-  id              String   @id @default(cuid())
-  quantity        Int      @default(1)
-  
-  participantId   String
-  participant     BillParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
-  
-  itemId          String
-  item            BillItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  
+model BillItemParticipant {
+  id            String @id @default(uuid())
+  participantId String
+  itemId        String
+
+  participant BillParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  item        BillItem        @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
   @@unique([participantId, itemId])
+  @@index([participantId])
+  @@index([itemId])
 }
 
 model Payment {
-  id              String   @id @default(cuid())
-  amount          Float
-  razorpayOrderId String?
+  id                String   @id @default(uuid())
+  billId            String
+  participantId     String
+  fromUserId        String?
+  toUserId          String
+  amount            Float
+  paymentMethod     String
+  payerUpi          String?
+  razorpayOrderId   String?
   razorpayPaymentId String?
-  paymentMethod   String   @default("RAZORPAY") // RAZORPAY | MANUAL_UPI
-  payerUpi       String?  // For manual UPI payments
-  status          String   @default("PENDING")
-  
-  billId          String
-  bill            Bill     @relation(fields: [billId], references: [id])
-  
-  fromUserId      String
-  fromUser        User     @relation(fields: [fromUserId], references: [id])
-  
-  toUserId        String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  status            String   @default("PENDING")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  bill        Bill            @relation(fields: [billId], references: [id], onDelete: Cascade)
+  participant BillParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  fromUser    User?           @relation(fields: [fromUserId], references: [id])
+
+  @@index([billId])
+  @@index([participantId])
+  @@index([fromUserId])
 }

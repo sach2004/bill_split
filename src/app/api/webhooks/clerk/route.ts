@@ -7,45 +7,34 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const evt = body as WebhookEvent
 
-    const clerkUserId = evt.data.id
+    if (evt.type === 'user.created' || evt.type === 'user.updated') {
+      const { id, email_addresses, first_name, last_name, phone_numbers } = evt.data
+      
+      const email = email_addresses?.[0]?.email_address || `user-${id}@temp.com`
+      const name = `${first_name || ''} ${last_name || ''}`.trim() || null
+      const phone = phone_numbers?.[0]?.phone_number || null
 
-    if (!clerkUserId) {
-      return NextResponse.json(
-        { error: 'No user ID provided' },
-        { status: 400 }
-      )
+      await prisma.user.upsert({
+        where: { clerkId: id },
+        update: { email, name, phone },
+        create: {
+          clerkId: id,
+          email,
+          name,
+          phone,
+        },
+      })
+
+      console.log('✅ User synced:', id, email)
     }
 
-    switch (evt.type) {
-      case 'user.created': {
-        const { email_addresses, first_name, last_name, phone_numbers } = evt.data
-        
-        const email = email_addresses[0]?.email_address
-        const name = `${first_name || ''} ${last_name || ''}`.trim()
-        const phone = phone_numbers?.[0]?.phone_number
-
-        await prisma.user.upsert({
-          where: { clerkId: clerkUserId },
-          update: { email, name, phone },
-          create: {
-            clerkId: clerkUserId,
-            email,
-            name,
-            phone,
-          },
-        })
-        break
-      }
-
-      case 'user.deleted': {
+    if (evt.type === 'user.deleted') {
+      const { id } = evt.data
+      if (id) {
         await prisma.user.delete({
-          where: { clerkId: clerkUserId },
-        })
-        break
+          where: { clerkId: id },
+        }).catch(err => console.log('User not found in DB:', id))
       }
-
-      default:
-        break
     }
 
     return NextResponse.json({ received: true }, { status: 200 })
