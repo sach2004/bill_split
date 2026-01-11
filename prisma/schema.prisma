@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id            String   @id @default(cuid())
+  clerkId       String   @unique
+  email         String   @unique
+  name          String?
+  phone         String?
+  defaultUpi    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  createdBills  Bill[]
+  participations BillParticipant[]
+  payments      Payment[]
+}
+
+model Bill {
+  id            String   @id @default(cuid())
+  shareId       String   @unique
+  title         String
+  imageUrl      String?
+  rawText       String?
+  totalAmount   Float
+  restaurantName String?
+  location      String?
+  status        String   @default("ACTIVE")
+  
+  createdById   String
+  createdBy     User     @relation(fields: [createdById], references: [id])
+  
+  items         BillItem[]
+  participants  BillParticipant[]
+  payments      Payment[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model BillItem {
+  id            String   @id @default(cuid())
+  name          String
+  price         Float
+  quantity      Int      @default(1)
+  category      String?
+  
+  billId        String
+  bill          Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+  
+  participants  BillParticipantItem[]
+  createdAt     DateTime @default(now())
+}
+
+model BillParticipant {
+  id            String   @id @default(cuid())
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id])
+  name          String
+  phone         String?
+  theirShare    Float    @default(0)
+  isPaid        Boolean  @default(false)
+  joinedViaLink Boolean  @default(false)
+  
+  billId        String
+  bill          Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+  
+  items         BillParticipantItem[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model BillParticipantItem {
+  id              String   @id @default(cuid())
+  quantity        Int      @default(1)
+  
+  participantId   String
+  participant     BillParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  
+  itemId          String
+  item            BillItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  
+  @@unique([participantId, itemId])
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  amount          Float
+  razorpayOrderId String?
+  razorpayPaymentId String?
+  paymentMethod   String   @default("RAZORPAY") // RAZORPAY | MANUAL_UPI
+  payerUpi       String?  // For manual UPI payments
+  status          String   @default("PENDING")
+  
+  billId          String
+  bill            Bill     @relation(fields: [billId], references: [id])
+  
+  fromUserId      String
+  fromUser        User     @relation(fields: [fromUserId], references: [id])
+  
+  toUserId        String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}

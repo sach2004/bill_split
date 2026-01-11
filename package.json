@@ -9,9 +9,20 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@clerk/nextjs": "^6.36.7",
+    "@prisma/client": "^7.2.0",
+    "@uploadthing/react": "^7.3.3",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.25.0",
+    "lucide-react": "^0.562.0",
     "next": "16.1.1",
+    "openai": "^6.16.0",
+    "razorpay": "^2.9.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "tailwind-merge": "^3.4.0",
+    "zod": "^4.3.5",
+    "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -20,6 +31,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "prisma": "^7.2.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
