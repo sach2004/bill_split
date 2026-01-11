@@ -1,15 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { QrCode, ArrowRight, Sparkles } from 'lucide-react'
+import { QrCode, ArrowRight, Sparkles, Loader2 } from 'lucide-react'
 import { toast } from '@/components/ui/toast'
 
-export default function UpiSetupPage() {
+function UpiSetupContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const billId = searchParams.get('billId')
@@ -44,7 +43,6 @@ export default function UpiSetupPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      {/* Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl animate-pulse" />
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl animate-pulse" />
@@ -98,13 +96,7 @@ export default function UpiSetupPage() {
               >
                 {saving ? (
                   <>
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      className="mr-2"
-                    >
-                      <Sparkles className="w-5 h-5" />
-                    </motion.div>
+                    <Loader2 className="mr-2 animate-spin" />
                     Saving...
                   </>
                 ) : (
@@ -128,5 +120,17 @@ export default function UpiSetupPage() {
         </div>
       </motion.div>
     </div>
+  )
+}
+
+export default function UpiSetupPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-12 h-12 animate-spin text-indigo-400" />
+      </div>
+    }>
+      <UpiSetupContent />
+    </Suspense>
   )
 }
